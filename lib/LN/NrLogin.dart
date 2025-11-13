@@ -1,20 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'createnew.dart'; // 新規登録ページを読み込み
+import '../firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ← 追加 // ← Firebase 初期化用
-import 'LN/createnew.dart'; // 新規登録ページ
-import 'HP.dart'; // ホームページ（MainPageWidget）
-import 'firebase_options.dart'; // ← FlutterFire CLI で生成されたファイル
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // ← async前に必須
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  ); // ← Firebase 初期化
+void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -29,6 +25,7 @@ class MyApp extends StatelessWidget {
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
@@ -46,29 +43,34 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // 🔹 Firebase ログイン処理
   Future<void> _onLogin() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     try {
-      // 🔹 Firebase Authentication でログイン
       final userCredential =
           await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
+        password: _passwordCtrl.text.trim(),
       );
 
-      // 🔹 成功したらホームページへ遷移
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainPageWidget()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ログイン成功：${userCredential.user?.email}')),
         );
+        // ログイン後の画面遷移はここで実装
       }
     } on FirebaseAuthException catch (e) {
-      // 🔹 エラー時はスナックバーで表示
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('ログインに失敗しました：${e.message}')),
-      );
+      String message = '';
+      if (e.code == 'user-not-found') {
+        message = 'ユーザーが存在しません';
+      } else if (e.code == 'wrong-password') {
+        message = 'パスワードが間違っています';
+      } else {
+        message = e.message ?? 'ログインに失敗しました';
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
