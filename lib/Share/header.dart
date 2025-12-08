@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../MF/Cool Ranking/2025Author.dart'; // AnimeDetailPage のファイルパスを調整
+import 'vote_page.dart';
 
 // =============================
 // 共通ヘッダー
@@ -135,9 +136,17 @@ class CustomDrawer extends StatelessWidget {
               style: TextStyle(color: Colors.white, fontSize: 24),
             ),
           ),
-          const ListTile(
+          ListTile(
             leading: Icon(Icons.how_to_vote),
             title: Text('投票する'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const VotePage(), // ← ここに遷移先を書く
+                ),
+              );
+            },
           ),
           const ListTile(
             leading: Icon(Icons.history),

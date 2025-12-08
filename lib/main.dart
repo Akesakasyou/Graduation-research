@@ -8,7 +8,7 @@ import 'firebase_options.dart'; // ← FlutterFire CLI で生成されたファ�
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // ← async前に必須
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform, //a
+    options: DefaultFirebaseOptions.currentPlatform,
   ); // ← Firebase 初期化
   runApp(const MyApp());
 }
