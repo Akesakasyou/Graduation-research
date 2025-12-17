@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
-import '../MF/Cool Ranking/2025Author.dart'; // AnimeDetailPage のファイルパスを調整
+import '../MF/Cool Ranking/2025Author.dart';
 import 'vote_page.dart';
+import 'ranking_page.dart';
+import 'my_ranking_page.dart';
+import '../pages/search_result_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../pages/AdminPage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // =============================
 // 共通ヘッダー
@@ -17,6 +23,8 @@ class CustomHeader extends StatefulWidget implements PreferredSizeWidget {
 
 class _CustomHeaderState extends State<CustomHeader> {
   bool isDark = true;
+
+  final TextEditingController _searchController = TextEditingController();
 
   void toggleTheme() {
     setState(() {
@@ -35,29 +43,22 @@ class _CustomHeaderState extends State<CustomHeader> {
         Offset.zero & overlay.size,
       ),
       items: const [
-        PopupMenuItem<int>(
-          value: 0,
-          child: Text('マイページ'),
-        ),
-        PopupMenuItem<int>(
-          value: 1,
-          child: Text('プロフィール'),
-        ),
-        PopupMenuItem<int>(
-          value: 2,
-          child: Text('ログイン'),
-        ),
+        PopupMenuItem<int>(value: 0, child: Text('マイページ')),
+        PopupMenuItem<int>(value: 1, child: Text('プロフィール')),
+        PopupMenuItem<int>(value: 2, child: Text('ログイン')),
       ],
-      elevation: 8.0,
-    ).then((value) {
-      if (value == 0) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('マイページを開きます')));
-      } else if (value == 1) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('プロフィールを開きます')));
-      }
-    });
+    );
+  }
+
+  void _onSearch(String keyword) {
+    if (keyword.trim().isEmpty) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SearchResultPage(keyword: keyword),
+      ),
+    );
   }
 
   @override
@@ -67,16 +68,17 @@ class _CustomHeaderState extends State<CustomHeader> {
       leading: Builder(
         builder: (context) => IconButton(
           icon: Icon(Icons.menu, color: isDark ? Colors.white : Colors.black),
-          onPressed: () {
-            Scaffold.of(context).openDrawer();
-          },
+          onPressed: () => Scaffold.of(context).openDrawer(),
         ),
       ),
       title: SizedBox(
         height: 40,
         child: TextField(
+          controller: _searchController,
+          textInputAction: TextInputAction.search,
+          onSubmitted: _onSearch,
           decoration: InputDecoration(
-            hintText: '検索バー',
+            hintText: '作品名で検索',
             hintStyle:
                 TextStyle(color: isDark ? Colors.black54 : Colors.black45),
             fillColor: isDark ? Colors.white : Colors.grey[200],
@@ -87,6 +89,7 @@ class _CustomHeaderState extends State<CustomHeader> {
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,
             ),
+            prefixIcon: const Icon(Icons.search),
           ),
         ),
       ),
@@ -96,7 +99,7 @@ class _CustomHeaderState extends State<CustomHeader> {
           builder: (context) => IconButton(
             icon:
                 Icon(Icons.person, color: isDark ? Colors.white : Colors.black),
-            onPressed: () async {
+            onPressed: () {
               final RenderBox button = context.findRenderObject() as RenderBox;
               final offset = button.localToGlobal(Offset.zero);
               _showProfileMenu(context, offset);
@@ -120,124 +123,118 @@ class _CustomHeaderState extends State<CustomHeader> {
 // =============================
 // ドロワーメニュー
 // =============================
+
 class CustomDrawer extends StatelessWidget {
   const CustomDrawer({super.key});
+
+  Future<bool> _isAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    print("UID: ${user?.uid}");
+
+    if (user == null) return false;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    print("User doc exists: ${doc.exists}");
+    print("User data: ${doc.data()}");
+
+    return doc.data()?['isAdmin'] == true;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          const DrawerHeader(
-            decoration: BoxDecoration(color: Colors.black87),
-            child: Text(
-              'メニュー',
-              style: TextStyle(color: Colors.white, fontSize: 24),
-            ),
-          ),
-          ListTile(
-            leading: Icon(Icons.how_to_vote),
-            title: Text('投票する'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const VotePage(), // ← ここに遷移先を書く
-                ),
-              );
-            },
-          ),
-          const ListTile(
-            leading: Icon(Icons.history),
-            title: Text('投票履歴'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.forum),
-            title: Text('スレッド'),
-          ),
+      child: FutureBuilder<bool>(
+        future: _isAdmin(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          // ▼ 歴代アニメランキング
-          ListTile(
-            leading: const Icon(Icons.star),
-            title: const Text('歴代アニメランキング'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AnimeDetailPage(),
-                ),
-              );
-            },
-          ),
+          final isAdmin = snapshot.data!;
 
-          // ▼ 今期アニメランキング
-          ListTile(
-            leading: const Icon(Icons.trending_up),
-            title: const Text('今期アニメランキング'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AnimeDetailPage(),
+          return ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              const DrawerHeader(
+                decoration: BoxDecoration(color: Colors.black87),
+                child: Text(
+                  'メニュー',
+                  style: TextStyle(color: Colors.white, fontSize: 24),
                 ),
-              );
-            },
-          ),
+              ),
 
-          // ▼ ジャンルランキング（修正追加）
-          ListTile(
-            leading: const Icon(Icons.category),
-            title: const Text('ジャンルランキング'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AnimeDetailPage(),
+              // ===== 共通メニュー =====
+              ListTile(
+                leading: const Icon(Icons.how_to_vote),
+                title: const Text('投票する'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const VotePage()),
                 ),
-              );
-            },
-          ),
+              ),
 
-          const ListTile(
-            leading: Icon(Icons.schedule),
-            title: Text('来季アニメ'),
-          ),
-
-          // ▼ 振り返りページ（修正追加）
-          ListTile(
-            leading: const Icon(Icons.replay),
-            title: const Text('振り返りページ'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AnimeDetailPage(),
+              ListTile(
+                leading: const Icon(Icons.star),
+                title: const Text('マイランキング'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MyRankingPage(
+                      userId: FirebaseAuth.instance.currentUser!.uid,
+                    ),
+                  ),
                 ),
-              );
-            },
-          ),
-        ],
+              ),
+
+              ListTile(
+                leading: const Icon(Icons.leaderboard),
+                title: const Text('総合ランキング'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RankingPage()),
+                ),
+              ),
+
+              // ===== 管理者専用 =====
+              if (isAdmin) ...[
+                const Divider(),
+                const ListTile(
+                  title: Text(
+                    '管理者',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.admin_panel_settings),
+                  title: const Text('管理者画面'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminPage()),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
 }
 
 // =============================
-// アニメ詳細ページ
+// アニメ詳細ページ（固定表示用）
 // =============================
-class AnimeDetailPage extends StatefulWidget {
-  const AnimeDetailPage({super.key});
-
+class AnimeDetailPageStatic extends StatefulWidget {
+  const AnimeDetailPageStatic({super.key});
   @override
-  State<AnimeDetailPage> createState() => _AnimeDetailPageState();
+  State<AnimeDetailPageStatic> createState() => _AnimeDetailPageStaticState();
 }
 
-class _AnimeDetailPageState extends State<AnimeDetailPage>
+class _AnimeDetailPageStaticState extends State<AnimeDetailPageStatic>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool isFavorite = false;
@@ -251,160 +248,145 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('アニメ詳細'),
-        backgroundColor: Colors.black,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // ランキング・タイトル
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text('1', style: TextStyle(fontSize: 20)),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'アニメタイトル',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      appBar: AppBar(title: const Text('アニメ詳細'), backgroundColor: Colors.black),
+      body: _buildBody(),
+    );
+  }
 
-            // 画像とあらすじ
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 画像
-                  Container(
-                    width: 150,
-                    height: 150,
-                    color: Colors.grey[400],
-                    alignment: Alignment.center,
-                    child: const Text('画像'),
-                  ),
-                  const SizedBox(width: 16),
-                  // あらすじ
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'あらすじ',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'ここにアニメのあらすじが入ります。長い文章も対応しています。'
-                          '～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～ ～',
-                          style: TextStyle(fontSize: 14, height: 1.4),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // 星評価 ＋ お気に入り
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: List.generate(
-                      5,
-                      (index) => const Icon(Icons.star, color: Colors.amber),
-                    )..add(
-                        const Padding(
-                          padding: EdgeInsets.only(left: 6),
-                          child: Text('(4.5)', style: TextStyle(fontSize: 16)),
-                        ),
-                      ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        isFavorite = !isFavorite;
-                      });
-                    },
-                    child: Row(
-                      children: [
-                        Icon(
-                          isFavorite ? Icons.favorite : Icons.favorite_border,
-                          color: isFavorite ? Colors.red : Colors.black54,
-                        ),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'お気に入り',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-            const Divider(thickness: 1),
-
-            // タブ
-            TabBar(
-              controller: _tabController,
-              labelColor: Colors.black,
-              indicatorColor: Colors.black,
-              tabs: const [
-                Tab(text: 'レビュー・感想'),
-                Tab(text: 'カテゴリ'),
-                Tab(text: 'スレッド'),
-              ],
-            ),
-
-            // タブの中身
-            SizedBox(
-              height: 250,
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildTabContent('ユーザーのレビューや感想がここに表示されます。'),
-                  _buildTabContent('ジャンルや制作会社などのカテゴリ情報。'),
-                  _buildTabContent('コメントやスレッドが表示されます。'),
-                ],
-              ),
-            ),
-          ],
-        ),
+  Widget _buildBody() {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _header(),
+          _imageAndSummary(),
+          const SizedBox(height: 16),
+          _ratingAndFavorite(),
+          const SizedBox(height: 16),
+          const Divider(),
+          _tabs(),
+        ],
       ),
     );
   }
 
-  Widget _buildTabContent(String text) {
+  Widget _header() {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Text(text, style: const TextStyle(fontSize: 15)),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+                border: Border.all(color: Colors.black),
+                borderRadius: BorderRadius.circular(8)),
+            alignment: Alignment.center,
+            child: const Text('1', style: TextStyle(fontSize: 20)),
+          ),
+          const SizedBox(width: 12),
+          const Text(
+            'アニメタイトル',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _imageAndSummary() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 150,
+            height: 150,
+            color: Colors.grey[400],
+            alignment: Alignment.center,
+            child: const Text('画像'),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('あらすじ', style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(height: 8),
+                Text(
+                  'ここにアニメのあらすじが入ります…',
+                  style: TextStyle(height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ratingAndFavorite() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(children: [
+            ...List.generate(
+                5, (_) => const Icon(Icons.star, color: Colors.amber)),
+            const SizedBox(width: 6),
+            const Text('(4.5)'),
+          ]),
+          GestureDetector(
+            onTap: () => setState(() => isFavorite = !isFavorite),
+            child: Row(
+              children: [
+                Icon(isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: isFavorite ? Colors.red : Colors.black54),
+                const SizedBox(width: 4),
+                const Text('お気に入り'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabs() {
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'レビュー・感想'),
+            Tab(text: 'カテゴリ'),
+            Tab(text: 'スレッド'),
+          ],
+          labelColor: Colors.black,
+          indicatorColor: Colors.black,
+        ),
+        SizedBox(
+          height: 250,
+          child: TabBarView(
+            controller: _tabController,
+            children: const [
+              Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('レビューが表示されます'),
+              ),
+              Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('カテゴリ情報'),
+              ),
+              Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('スレッド一覧'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -5,58 +5,65 @@ import 'package:firebase_auth/firebase_auth.dart';
 class VotePage extends StatelessWidget {
   const VotePage({super.key});
 
-  // ✅ ダイアログを表示
+  // ★ 評価ダイアログを表示する関数
   void showReviewDialog(BuildContext context, String animeId, String title) {
     double score = 50;
     final TextEditingController commentController = TextEditingController();
+    bool includeGlobal = true;
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: Text("「$title」の評価"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text("スコア（0〜100点）"),
-              StatefulBuilder(
-                builder: (context, setState) {
-                  return Column(
-                    children: [
-                      Slider(
-                        value: score,
-                        min: 0,
-                        max: 100,
-                        divisions: 100,
-                        label: score.toInt().toString(),
-                        onChanged: (value) {
-                          setState(() {
-                            score = value;
-                          });
-                        },
-                      ),
-                      Text(
-                        "${score.toInt()} 点",
-                        style: const TextStyle(fontSize: 18),
-                      )
-                    ],
-                  );
-                },
-              ),
-              TextField(
-                controller: commentController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: "感想を書いてください",
-                ),
-              ),
-            ],
+          content: StatefulBuilder(
+            builder: (context, setState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("スコア（0〜100点）"),
+                  Slider(
+                    value: score,
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    label: score.toInt().toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        score = value;
+                      });
+                    },
+                  ),
+                  Text("${score.toInt()} 点",
+                      style: const TextStyle(fontSize: 18)),
+                  TextField(
+                    controller: commentController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      hintText: "感想を書いてください",
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    title: const Text("総合ランキングに反映する"),
+                    value: includeGlobal,
+                    onChanged: (v) {
+                      setState(() {
+                        includeGlobal = v ?? true;
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ],
+              );
+            },
           ),
           actions: [
             TextButton(
               onPressed: () async {
                 final uid = FirebaseAuth.instance.currentUser!.uid;
 
+                /// ① reviews/animeId/users/uid に保存（総合ランキング用）
                 await FirebaseFirestore.instance
                     .collection('reviews')
                     .doc(animeId)
@@ -65,6 +72,21 @@ class VotePage extends StatelessWidget {
                     .set({
                   'score': score.toInt(),
                   'comment': commentController.text,
+                  'includeGlobal': includeGlobal,
+                  'createdAt': FieldValue.serverTimestamp(),
+                });
+
+                /// ② users/uid/myVotes/animeId に保存（マイランキング用）
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .collection('myVotes')
+                    .doc(animeId)
+                    .set({
+                  'animeTitle': title,
+                  'score': score.toInt(),
+                  'comment': commentController.text,
+                  'includeGlobal': includeGlobal,
                   'createdAt': FieldValue.serverTimestamp(),
                 });
 
