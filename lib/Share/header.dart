@@ -183,9 +183,7 @@ class CustomDrawer extends StatelessWidget {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => MyRankingPage(
-                      userId: FirebaseAuth.instance.currentUser!.uid,
-                    ),
+                    builder: (_) => const MyRankingPage(),
                   ),
                 ),
               ),
