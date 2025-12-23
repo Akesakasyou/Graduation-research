@@ -2,14 +2,57 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-class VotePage extends StatelessWidget {
+class VotePage extends StatefulWidget {
   const VotePage({super.key});
 
-  // ★ 評価ダイアログを表示する関数
-  void showReviewDialog(BuildContext context, String animeId, String title) {
-    double score = 50;
-    final TextEditingController commentController = TextEditingController();
-    bool includeGlobal = true;
+  @override
+  State<VotePage> createState() => _VotePageState();
+}
+
+class _VotePageState extends State<VotePage> {
+  Set<String> votedAnimeIds = {};
+  Map<String, Map<String, dynamic>> myVotes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMyVotes();
+  }
+
+  /// =============================
+  /// 自分の投票データを取得
+  /// =============================
+  Future<void> _loadMyVotes() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('myVotes')
+        .get();
+
+    setState(() {
+      votedAnimeIds = snap.docs.map((d) => d.id).toSet();
+      myVotes = {
+        for (var d in snap.docs) d.id: d.data(),
+      };
+    });
+  }
+
+  /// =============================
+  /// 評価 / 再評価ダイアログ
+  /// =============================
+  void showReviewDialog(
+    BuildContext context,
+    String animeId,
+    String title, {
+    Map<String, dynamic>? existingData,
+  }) {
+    double score = existingData?['score']?.toDouble() ?? 50;
+    bool includeGlobal = existingData?['includeGlobal'] ?? true;
+    final TextEditingController commentController =
+        TextEditingController(text: existingData?['comment'] ?? "");
 
     showDialog(
       context: context,
@@ -17,7 +60,7 @@ class VotePage extends StatelessWidget {
         return AlertDialog(
           title: Text("「$title」の評価"),
           content: StatefulBuilder(
-            builder: (context, setState) {
+            builder: (context, setStateDialog) {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -29,7 +72,7 @@ class VotePage extends StatelessWidget {
                     divisions: 100,
                     label: score.toInt().toString(),
                     onChanged: (value) {
-                      setState(() {
+                      setStateDialog(() {
                         score = value;
                       });
                     },
@@ -39,16 +82,14 @@ class VotePage extends StatelessWidget {
                   TextField(
                     controller: commentController,
                     maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: "感想を書いてください",
-                    ),
+                    decoration: const InputDecoration(hintText: "感想を書いてください"),
                   ),
                   const SizedBox(height: 16),
                   CheckboxListTile(
                     title: const Text("総合ランキングに反映する"),
                     value: includeGlobal,
                     onChanged: (v) {
-                      setState(() {
+                      setStateDialog(() {
                         includeGlobal = v ?? true;
                       });
                     },
@@ -63,7 +104,7 @@ class VotePage extends StatelessWidget {
               onPressed: () async {
                 final uid = FirebaseAuth.instance.currentUser!.uid;
 
-                /// ① reviews/animeId/users/uid に保存（総合ランキング用）
+                /// 総合ランキング用（上書き）
                 await FirebaseFirestore.instance
                     .collection('reviews')
                     .doc(animeId)
@@ -73,10 +114,10 @@ class VotePage extends StatelessWidget {
                   'score': score.toInt(),
                   'comment': commentController.text,
                   'includeGlobal': includeGlobal,
-                  'createdAt': FieldValue.serverTimestamp(),
+                  'updatedAt': FieldValue.serverTimestamp(),
                 });
 
-                /// ② users/uid/myVotes/animeId に保存（マイランキング用）
+                /// マイランキング用（上書き）
                 await FirebaseFirestore.instance
                     .collection('users')
                     .doc(uid)
@@ -87,16 +128,25 @@ class VotePage extends StatelessWidget {
                   'score': score.toInt(),
                   'comment': commentController.text,
                   'includeGlobal': includeGlobal,
-                  'createdAt': FieldValue.serverTimestamp(),
+                  'updatedAt': FieldValue.serverTimestamp(),
                 });
 
                 Navigator.pop(context);
 
+                setState(() {
+                  votedAnimeIds.add(animeId);
+                  myVotes[animeId] = {
+                    'score': score.toInt(),
+                    'comment': commentController.text,
+                    'includeGlobal': includeGlobal,
+                  };
+                });
+
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("評価を保存しました！")),
+                  const SnackBar(content: Text("評価を更新しました！")),
                 );
               },
-              child: const Text("送信"),
+              child: const Text("保存"),
             ),
           ],
         );
@@ -104,6 +154,9 @@ class VotePage extends StatelessWidget {
     );
   }
 
+  /// =============================
+  /// 画面
+  /// =============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,14 +177,21 @@ class VotePage extends StatelessWidget {
               final animeId = anime.id;
               final title = anime['title'];
 
+              final isVoted = votedAnimeIds.contains(animeId);
+
               return Card(
                 child: ListTile(
                   title: Text(title),
                   trailing: ElevatedButton(
-                    child: const Text("評価する"),
                     onPressed: () {
-                      showReviewDialog(context, animeId, title);
+                      showReviewDialog(
+                        context,
+                        animeId,
+                        title,
+                        existingData: myVotes[animeId],
+                      );
                     },
+                    child: Text(isVoted ? "再評価" : "評価する"),
                   ),
                 ),
               );

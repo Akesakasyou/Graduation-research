@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../MF/Cool Ranking/2025Author.dart';
-import 'vote_page.dart';
-import 'ranking_page.dart';
-import 'my_ranking_page.dart';
+import '../pages/vote_page.dart';
+import '../pages/ranking_page.dart';
+import '../pages/my_ranking_page.dart';
 import '../pages/search_result_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../pages/AdminPage.dart';

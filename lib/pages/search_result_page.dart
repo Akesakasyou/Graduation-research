@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../Share/header.dart';
-import '../Share/AnimeDetailPage.dart'; // ここで動的詳細ページを import
+import 'AnimeDetailPage.dart'; // ここで動的詳細ページを import
 
 class SearchResultPage extends StatelessWidget {
   final String keyword;
