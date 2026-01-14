@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'animedetailpage.dart';
 
-// ⭐ スター表示
+/// ⭐ スター表示（0〜100 → 5段階）
 Widget buildStarRating(double score) {
   final star = (score / 100) * 5;
 
@@ -19,6 +19,11 @@ Widget buildStarRating(double score) {
   );
 }
 
+enum RankSortType {
+  average,
+  votes,
+}
+
 class RankingPage extends StatefulWidget {
   const RankingPage({super.key});
 
@@ -31,14 +36,9 @@ class _RankingPageState extends State<RankingPage> {
   String? selectedSeason;
   final TextEditingController yearController = TextEditingController();
 
-  final genres = [
-    'バトル',
-    '恋愛',
-    '日常',
-    'ファンタジー',
-    'SF',
-    'ホラー',
-  ];
+  RankSortType sortType = RankSortType.average;
+
+  final genres = ['バトル', '恋愛', '日常', 'ファンタジー', 'SF', 'ホラー'];
 
   final seasons = {
     'spring': '春',
@@ -47,14 +47,18 @@ class _RankingPageState extends State<RankingPage> {
     'winter': '冬',
   };
 
-  // 🔹 ランキング取得（フィルター対応）
+  /// =============================
+  /// ランキング取得
+  /// =============================
   Future<List<Map<String, dynamic>>> loadRanking() async {
     Query query = FirebaseFirestore.instance.collection('animes');
 
     if (selectedGenre != null) {
       query = query.where('genre', isEqualTo: selectedGenre);
     }
-
+    if (selectedSeason != null) {
+      query = query.where('season', isEqualTo: selectedSeason);
+    }
     if (yearController.text.isNotEmpty) {
       final year = int.tryParse(yearController.text);
       if (year != null) {
@@ -62,39 +66,39 @@ class _RankingPageState extends State<RankingPage> {
       }
     }
 
-    if (selectedSeason != null) {
-      query = query.where('season', isEqualTo: selectedSeason);
-    }
-
     final animeSnap = await query.get();
-
-    List<Future<Map<String, dynamic>?>> futures = [];
-
-    for (var anime in animeSnap.docs) {
-      futures.add(_loadAnimeAverage(anime));
-    }
-
+    final futures = animeSnap.docs.map(_loadAnimeStats).toList();
     final results = await Future.wait(futures);
 
-    return results.whereType<Map<String, dynamic>>().toList()
-      ..sort((a, b) => b['average'].compareTo(a['average']));
+    final list = results.whereType<Map<String, dynamic>>().toList();
+
+    /// 並び替え
+    if (sortType == RankSortType.average) {
+      list.sort((a, b) => b['average'].compareTo(a['average']));
+    } else {
+      list.sort((a, b) => b['votes'].compareTo(a['votes']));
+    }
+
+    return list;
   }
 
-  // 🔹 平均スコア計算
-  Future<Map<String, dynamic>?> _loadAnimeAverage(
+  /// =============================
+  /// 1作品の平均点 & 投票数
+  /// =============================
+  Future<Map<String, dynamic>?> _loadAnimeStats(
       QueryDocumentSnapshot anime) async {
     final animeId = anime.id;
 
-    final reviewsSnap = await FirebaseFirestore.instance
+    final snap = await FirebaseFirestore.instance
         .collection('reviews')
         .doc(animeId)
         .collection('users')
         .where('includeGlobal', isEqualTo: true)
         .get();
 
-    if (reviewsSnap.docs.isEmpty) return null;
+    if (snap.docs.isEmpty) return null;
 
-    final scores = reviewsSnap.docs.map((e) => e['score'] as int).toList();
+    final scores = snap.docs.map((e) => e['score'] as int).toList();
     final average = scores.reduce((a, b) => a + b) / scores.length;
 
     return {
@@ -102,71 +106,74 @@ class _RankingPageState extends State<RankingPage> {
       'title': anime['title'],
       'imageUrl': anime['imageUrl'] ?? '',
       'average': average,
+      'votes': scores.length,
     };
   }
 
+  /// =============================
+  /// UI
+  /// =============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('総合ランキング')),
+      appBar: AppBar(
+        title: const Text('総合ランキング'),
+        actions: [
+          PopupMenuButton<RankSortType>(
+            onSelected: (v) => setState(() => sortType = v),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: RankSortType.average,
+                child: Text('平均点順'),
+              ),
+              PopupMenuItem(
+                value: RankSortType.votes,
+                child: Text('投票数順'),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: Column(
         children: [
-          // 🔹 フィルターUI
+          /// フィルター
           Padding(
             padding: const EdgeInsets.all(8),
             child: Wrap(
               spacing: 12,
               runSpacing: 8,
               children: [
-                // ジャンル
                 DropdownButton<String>(
                   hint: const Text('ジャンル'),
                   value: selectedGenre,
                   items: genres
-                      .map(
-                        (g) => DropdownMenuItem(
-                          value: g,
-                          child: Text(g),
-                        ),
-                      )
+                      .map((g) => DropdownMenuItem(
+                            value: g,
+                            child: Text(g),
+                          ))
                       .toList(),
-                  onChanged: (value) {
-                    setState(() => selectedGenre = value);
-                  },
+                  onChanged: (v) => setState(() => selectedGenre = v),
                 ),
-
-                // 年（入力）
                 SizedBox(
                   width: 100,
                   child: TextField(
                     controller: yearController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '年',
-                      hintText: '2024',
-                    ),
+                    decoration: const InputDecoration(labelText: '年'),
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
-
-                // 季節
                 DropdownButton<String>(
                   hint: const Text('季節'),
                   value: selectedSeason,
                   items: seasons.entries
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value),
-                        ),
-                      )
+                      .map((e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value),
+                          ))
                       .toList(),
-                  onChanged: (value) {
-                    setState(() => selectedSeason = value);
-                  },
+                  onChanged: (v) => setState(() => selectedSeason = v),
                 ),
-
-                // リセット
                 TextButton(
                   onPressed: () {
                     setState(() {
@@ -183,20 +190,20 @@ class _RankingPageState extends State<RankingPage> {
 
           const Divider(),
 
-          // 🔹 ランキング表示
+          /// ランキング
           Expanded(
-            child: FutureBuilder(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
               future: loadRanking(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final list = snapshot.data as List<Map<String, dynamic>>;
-
-                if (list.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return const Center(child: Text('該当データがありません'));
                 }
+
+                final list = snapshot.data!;
 
                 return ListView.builder(
                   itemCount: list.length,
@@ -207,14 +214,16 @@ class _RankingPageState extends State<RankingPage> {
                       margin: const EdgeInsets.all(12),
                       child: ListTile(
                         leading: item['imageUrl'] != ''
-                            ? Image.network(item['imageUrl'], width: 60)
+                            ? Image.network(item['imageUrl'],
+                                width: 60, fit: BoxFit.cover)
                             : const Icon(Icons.image_not_supported),
                         title: Text('${index + 1}位：${item['title']}'),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '平均 ${item['average'].toStringAsFixed(1)} 点',
+                              '平均 ${item['average'].toStringAsFixed(1)} 点'
+                              '（${item['votes']} 票）',
                             ),
                             buildStarRating(item['average']),
                           ],

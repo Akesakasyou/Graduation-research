@@ -7,6 +7,7 @@ import '../pages/search_result_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../pages/AdminPage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../pages/vote_select_page.dart';
 
 // =============================
 // 共通ヘッダー
@@ -173,7 +174,9 @@ class CustomDrawer extends StatelessWidget {
                 title: const Text('投票する'),
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const VotePage()),
+                  MaterialPageRoute(
+                    builder: (_) => const VoteSelectPage(),
+                  ),
                 ),
               ),
 

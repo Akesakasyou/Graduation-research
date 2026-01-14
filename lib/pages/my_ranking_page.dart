@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'animedetailpage.dart';
 
-// ⭐ スター表示
+/// ⭐ スター表示
 Widget buildStarRating(double score) {
   final star = (score / 100) * 5;
 
@@ -43,9 +43,9 @@ class _MyRankingPageState extends State<MyRankingPage> {
     'winter': '冬',
   };
 
-  // =============================
-  // マイランキング取得（フィルター対応）
-  // =============================
+  /// =============================
+  /// マイランキング取得
+  /// =============================
   Future<List<Map<String, dynamic>>> loadMyRanking() async {
     final myVotesSnap = await FirebaseFirestore.instance
         .collection('users')
@@ -53,9 +53,7 @@ class _MyRankingPageState extends State<MyRankingPage> {
         .collection('myVotes')
         .get();
 
-    List<Map<String, dynamic>> result = [];
-
-    for (var vote in myVotesSnap.docs) {
+    final futures = myVotesSnap.docs.map((vote) async {
       final animeId = vote.id;
       final score = vote['score'];
 
@@ -64,100 +62,94 @@ class _MyRankingPageState extends State<MyRankingPage> {
           .doc(animeId)
           .get();
 
-      if (!animeDoc.exists) continue;
+      if (!animeDoc.exists) return null;
 
       final anime = animeDoc.data()!;
 
-      // 🔹 フィルター判定
-      if (selectedGenre != null && anime['genre'] != selectedGenre) continue;
+      // 🔹 フィルター
+      if (selectedGenre != null && anime['genre'] != selectedGenre) {
+        return null;
+      }
 
       if (yearController.text.isNotEmpty) {
         final year = int.tryParse(yearController.text);
-        if (year != null && anime['year'] != year) continue;
+        if (year != null && anime['year'] != year) return null;
       }
 
-      if (selectedSeason != null && anime['season'] != selectedSeason) continue;
+      if (selectedSeason != null && anime['season'] != selectedSeason) {
+        return null;
+      }
 
-      result.add({
+      return {
         'animeId': animeId,
         'title': anime['title'],
         'imageUrl': anime['imageUrl'] ?? '',
         'score': score,
-      });
-    }
+      };
+    }).toList();
 
-    // 🔹 点数順（高い順）
-    result.sort((a, b) => b['score'].compareTo(a['score']));
-    return result;
+    final results = await Future.wait(futures);
+
+    return results.whereType<Map<String, dynamic>>().toList()
+      ..sort((a, b) => b['score'].compareTo(a['score']));
   }
 
-  // =============================
-  // UI
-  // =============================
+  /// =============================
+  /// UI
+  /// =============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('マイランキング')),
       body: Column(
         children: [
-          // 🔹 フィルターUI
+          /// 🔹 フィルターUI
           Padding(
             padding: const EdgeInsets.all(8),
             child: Wrap(
               spacing: 12,
               runSpacing: 8,
               children: [
-                // ジャンル
                 DropdownButton<String>(
                   hint: const Text('ジャンル'),
                   value: selectedGenre,
                   items: genres
-                      .map(
-                        (g) => DropdownMenuItem(
-                          value: g,
-                          child: Text(g),
-                        ),
-                      )
+                      .map((g) => DropdownMenuItem(
+                            value: g,
+                            child: Text(g),
+                          ))
                       .toList(),
                   onChanged: (v) => setState(() => selectedGenre = v),
                 ),
 
-                // 年（入力）
                 SizedBox(
                   width: 100,
                   child: TextField(
                     controller: yearController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '年',
-                      hintText: '2024',
-                    ),
+                    decoration: const InputDecoration(labelText: '年'),
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
 
-                // 季節
                 DropdownButton<String>(
                   hint: const Text('季節'),
                   value: selectedSeason,
                   items: seasons.entries
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value),
-                        ),
-                      )
+                      .map((e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value),
+                          ))
                       .toList(),
                   onChanged: (v) => setState(() => selectedSeason = v),
                 ),
 
-                // 今期ボタン（UX向上）
+                // 今期
                 TextButton(
                   onPressed: () {
                     setState(() {
                       final now = DateTime.now();
                       yearController.text = now.year.toString();
-
                       final m = now.month;
                       if (m <= 3)
                         selectedSeason = 'winter';
@@ -172,7 +164,6 @@ class _MyRankingPageState extends State<MyRankingPage> {
                   child: const Text('今期'),
                 ),
 
-                // リセット
                 TextButton(
                   onPressed: () {
                     setState(() {
@@ -187,37 +178,18 @@ class _MyRankingPageState extends State<MyRankingPage> {
             ),
           ),
 
-          // 🔹 フィルター状態表示（総合ランキングと同UX）
-          if (selectedGenre != null ||
-              selectedSeason != null ||
-              yearController.text.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                '絞り込み：'
-                '${selectedGenre ?? ''} '
-                '${yearController.text.isNotEmpty ? "${yearController.text}年" : ''} '
-                '${selectedSeason != null ? seasons[selectedSeason] : ''}',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ),
-
           const Divider(),
 
-          // =============================
-          // ランキング表示
-          // =============================
+          /// 🔹 ランキング表示
           Expanded(
-            child: FutureBuilder(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
               future: loadMyRanking(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final list = snapshot.data as List<Map<String, dynamic>>;
-
-                if (list.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return const Center(
                     child: Text(
                       'この条件で評価した作品はありません',
@@ -225,6 +197,8 @@ class _MyRankingPageState extends State<MyRankingPage> {
                     ),
                   );
                 }
+
+                final list = snapshot.data!;
 
                 return ListView.builder(
                   itemCount: list.length,
@@ -235,7 +209,11 @@ class _MyRankingPageState extends State<MyRankingPage> {
                       margin: const EdgeInsets.all(12),
                       child: ListTile(
                         leading: item['imageUrl'] != ''
-                            ? Image.network(item['imageUrl'], width: 60)
+                            ? Image.network(
+                                item['imageUrl'],
+                                width: 60,
+                                fit: BoxFit.cover,
+                              )
                             : const Icon(Icons.image_not_supported),
                         title: Text('${index + 1}位：${item['title']}'),
                         subtitle: Column(
@@ -249,8 +227,9 @@ class _MyRankingPageState extends State<MyRankingPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  AnimeDetailPage(animeId: item['animeId']),
+                              builder: (_) => AnimeDetailPage(
+                                animeId: item['animeId'],
+                              ),
                             ),
                           );
                         },

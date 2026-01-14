@@ -3,202 +3,174 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class VotePage extends StatefulWidget {
-  const VotePage({super.key});
+  final String animeId;
+
+  const VotePage({
+    super.key,
+    required this.animeId,
+  });
 
   @override
   State<VotePage> createState() => _VotePageState();
 }
 
 class _VotePageState extends State<VotePage> {
-  Set<String> votedAnimeIds = {};
-  Map<String, Map<String, dynamic>> myVotes = {};
+  final _commentController = TextEditingController();
+
+  int _score = 80;
+  bool _includeGlobal = true;
+  bool _loading = true;
+
+  final String uid = FirebaseAuth.instance.currentUser!.uid;
+
+  // =============================
+  // 既存レビュー読み込み（再評価対応）
+  // =============================
+  Future<void> _loadMyReview() async {
+    final doc = await FirebaseFirestore.instance
+        .collection('reviews')
+        .doc(widget.animeId)
+        .collection('users')
+        .doc(uid)
+        .get();
+
+    if (doc.exists) {
+      final data = doc.data()!;
+      _score = data['score'] ?? 80;
+      _commentController.text = data['comment'] ?? '';
+      _includeGlobal = data['includeGlobal'] ?? true;
+    }
+
+    setState(() => _loading = false);
+  }
+
+  // =============================
+  // 平均点再計算
+  // =============================
+  Future<void> _updateAverageScore() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('reviews')
+        .doc(widget.animeId)
+        .collection('users')
+        .where('includeGlobal', isEqualTo: true)
+        .get();
+
+    double avg = 0;
+
+    if (snap.docs.isNotEmpty) {
+      final scores = snap.docs.map((d) => d['score'] as int).toList();
+      avg = scores.reduce((a, b) => a + b) / scores.length;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('animes')
+        .doc(widget.animeId)
+        .update({
+      'averageScore': avg,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // =============================
+  // 保存
+  // =============================
+  Future<void> _saveReview() async {
+    final reviewRef = FirebaseFirestore.instance
+        .collection('reviews')
+        .doc(widget.animeId)
+        .collection('users')
+        .doc(uid);
+
+    await reviewRef.set({
+      'score': _score,
+      'comment': _commentController.text,
+      'includeGlobal': _includeGlobal,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await _updateAverageScore();
+
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadMyVotes();
+    _loadMyReview();
   }
 
-  /// =============================
-  /// 自分の投票データを取得
-  /// =============================
-  Future<void> _loadMyVotes() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('myVotes')
-        .get();
-
-    setState(() {
-      votedAnimeIds = snap.docs.map((d) => d.id).toSet();
-      myVotes = {
-        for (var d in snap.docs) d.id: d.data(),
-      };
-    });
-  }
-
-  /// =============================
-  /// 評価 / 再評価ダイアログ
-  /// =============================
-  void showReviewDialog(
-    BuildContext context,
-    String animeId,
-    String title, {
-    Map<String, dynamic>? existingData,
-  }) {
-    double score = existingData?['score']?.toDouble() ?? 50;
-    bool includeGlobal = existingData?['includeGlobal'] ?? true;
-    final TextEditingController commentController =
-        TextEditingController(text: existingData?['comment'] ?? "");
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("「$title」の評価"),
-          content: StatefulBuilder(
-            builder: (context, setStateDialog) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text("スコア（0〜100点）"),
-                  Slider(
-                    value: score,
-                    min: 0,
-                    max: 100,
-                    divisions: 100,
-                    label: score.toInt().toString(),
-                    onChanged: (value) {
-                      setStateDialog(() {
-                        score = value;
-                      });
-                    },
-                  ),
-                  Text("${score.toInt()} 点",
-                      style: const TextStyle(fontSize: 18)),
-                  TextField(
-                    controller: commentController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(hintText: "感想を書いてください"),
-                  ),
-                  const SizedBox(height: 16),
-                  CheckboxListTile(
-                    title: const Text("総合ランキングに反映する"),
-                    value: includeGlobal,
-                    onChanged: (v) {
-                      setStateDialog(() {
-                        includeGlobal = v ?? true;
-                      });
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                  ),
-                ],
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                final uid = FirebaseAuth.instance.currentUser!.uid;
-
-                /// 総合ランキング用（上書き）
-                await FirebaseFirestore.instance
-                    .collection('reviews')
-                    .doc(animeId)
-                    .collection('users')
-                    .doc(uid)
-                    .set({
-                  'score': score.toInt(),
-                  'comment': commentController.text,
-                  'includeGlobal': includeGlobal,
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
-
-                /// マイランキング用（上書き）
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .collection('myVotes')
-                    .doc(animeId)
-                    .set({
-                  'animeTitle': title,
-                  'score': score.toInt(),
-                  'comment': commentController.text,
-                  'includeGlobal': includeGlobal,
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
-
-                Navigator.pop(context);
-
-                setState(() {
-                  votedAnimeIds.add(animeId);
-                  myVotes[animeId] = {
-                    'score': score.toInt(),
-                    'comment': commentController.text,
-                    'includeGlobal': includeGlobal,
-                  };
-                });
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("評価を更新しました！")),
-                );
-              },
-              child: const Text("保存"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// =============================
-  /// 画面
-  /// =============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("アニメ評価ページ")),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('animes').snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final docs = snapshot.data!.docs;
-
-          return ListView.builder(
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final anime = docs[index];
-              final animeId = anime.id;
-              final title = anime['title'];
-
-              final isVoted = votedAnimeIds.contains(animeId);
-
-              return Card(
-                child: ListTile(
-                  title: Text(title),
-                  trailing: ElevatedButton(
-                    onPressed: () {
-                      showReviewDialog(
-                        context,
-                        animeId,
-                        title,
-                        existingData: myVotes[animeId],
-                      );
-                    },
-                    child: Text(isVoted ? "再評価" : "評価する"),
+      appBar: AppBar(title: const Text('評価する')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // スコア
+                  Text(
+                    'スコア：$_score 点',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              );
-            },
-          );
-        },
-      ),
+                  Slider(
+                    value: _score.toDouble(),
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    label: _score.toString(),
+                    onChanged: (v) => setState(() => _score = v.round()),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 感想
+                  const Text(
+                    '感想',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _commentController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: '感想を書いてください',
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 全体ランキングに含める
+                  SwitchListTile(
+                    title: const Text('全体ランキングに含める'),
+                    value: _includeGlobal,
+                    onChanged: (v) => setState(() => _includeGlobal = v),
+                  ),
+
+                  const Spacer(),
+
+                  // 保存
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.save),
+                      label: const Text('保存する'),
+                      onPressed: _saveReview,
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
