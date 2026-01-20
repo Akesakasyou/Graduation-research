@@ -88,6 +88,16 @@ class _VotePageState extends State<VotePage> {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('myVotes')
+        .doc(widget.animeId)
+        .set({
+      'score': _score,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
     await _updateAverageScore();
 
     if (!mounted) return;

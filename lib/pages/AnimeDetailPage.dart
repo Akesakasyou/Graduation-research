@@ -190,6 +190,105 @@ class AnimeDetailPage extends StatelessWidget {
 
                 const Divider(height: 32),
 
+                /// あらすじ
+                const Text(
+                  'あらすじ',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  data['synopsis'] ?? 'あらすじは未登録です',
+                  style: const TextStyle(fontSize: 15),
+                ),
+
+                const Divider(height: 32),
+
+                /// みんなの感想
+                const Text(
+                  'みんなの感想',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('reviews')
+                      .doc(animeId)
+                      .collection('users')
+                      .where('includeGlobal', isEqualTo: true)
+                      //.orderBy('updatedAt', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.data!.docs.isEmpty) {
+                      return const Text(
+                        'まだ感想はありません',
+                        style: TextStyle(color: Colors.grey),
+                      );
+                    }
+
+                    return Column(
+                      children: snapshot.data!.docs.map((doc) {
+                        final review = doc.data() as Map<String, dynamic>;
+                        final reviewUid = doc.id;
+                        final isMine = reviewUid == myUid;
+                        final likesCount = review['likesCount'] ?? 0;
+
+                        return Card(
+                          color: isMine ? Colors.amber.withOpacity(0.15) : null,
+                          child: ListTile(
+                            leading: const Icon(Icons.person),
+                            title: Text('${review['score']} 点'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(review['comment'] ?? ''),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                          Icons.thumb_up_alt_outlined,
+                                          size: 18),
+                                      onPressed: () {
+                                        _toggleLike(
+                                          reviewUid,
+                                          false, // 簡易版（後で isLiked 判定追加OK）
+                                        );
+                                      },
+                                    ),
+                                    Text(likesCount.toString()),
+                                    if (isMine)
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 8),
+                                        child: Text(
+                                          'あなたの感想',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.orange,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+
                 /// 以下そのまま（感想・評価）
                 // ← ここは元のコードと同じなので省略してOK
               ],

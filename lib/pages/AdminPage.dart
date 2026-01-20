@@ -28,15 +28,17 @@ class AdminPage extends StatelessWidget {
             .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          // ✅ 初回ロードのみぐるぐる
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final docs = snapshot.data!.docs;
-
-          if (docs.isEmpty) {
+          // ✅ データなし
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(child: Text('作品がまだありません'));
           }
+
+          final docs = snapshot.data!.docs;
 
           return ListView.builder(
             itemCount: docs.length,
@@ -44,18 +46,26 @@ class AdminPage extends StatelessWidget {
               final anime = docs[index];
               final data = anime.data() as Map<String, dynamic>;
 
+              final seasonKey = data['season'];
+              final seasonLabel =
+                  seasonKey != null ? seasons[seasonKey] ?? '-' : '-';
+
               return Card(
                 margin: const EdgeInsets.all(8),
                 child: ListTile(
                   leading: (data['imageUrl'] ?? '').toString().isNotEmpty
-                      ? Image.network(data['imageUrl'], width: 50)
+                      ? Image.network(
+                          data['imageUrl'],
+                          width: 50,
+                          fit: BoxFit.cover,
+                        )
                       : const Icon(Icons.image),
                   title: Text(data['title'] ?? ''),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('年：${data['year'] ?? '-'}'),
-                      Text('季節：${seasons[data['season']] ?? '-'}'),
+                      Text('季節：$seasonLabel'),
                       if ((data['genre'] ?? '').toString().isNotEmpty)
                         Text('ジャンル：${data['genre']}'),
                     ],
@@ -114,7 +124,6 @@ class AdminPage extends StatelessWidget {
                 _field(title, 'タイトル'),
                 _field(yearController, '年（例：2024）', type: TextInputType.number),
                 DropdownButtonFormField<String>(
-                  value: selectedSeason,
                   decoration: const InputDecoration(labelText: '季節'),
                   items: seasons.entries
                       .map((e) => DropdownMenuItem(
@@ -159,11 +168,9 @@ class AdminPage extends StatelessWidget {
                   'opArtist': opArtist.text.trim(),
                   'edTitle': edTitle.text.trim(),
                   'edArtist': edArtist.text.trim(),
-                  'totalScore': 0,
-                  'voteCount': 0,
-                  'avgScore': 0.0,
+                  'averageScore': 0.0,
                   'createdAt': FieldValue.serverTimestamp(),
-                  'updatedAt': FieldValue.serverTimestamp(), // ← 追加
+                  'updatedAt': FieldValue.serverTimestamp(),
                 });
 
                 Navigator.pop(context);
