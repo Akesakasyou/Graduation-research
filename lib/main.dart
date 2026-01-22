@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // ← 追加 // ← Firebase 初期化用
 import 'LN/createnew.dart'; // 新規登録ページ
-import 'HP.dart'; // ホームページ（MainPageWidget）
+//import 'HP.dart'; // ホームページ（MainPageWidget）
 import 'firebase_options.dart'; // ← FlutterFire CLI で生成されたファイル
+import 'pages/top_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // ← async前に必須
@@ -61,7 +62,8 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const MainPageWidget()),
+          MaterialPageRoute(
+              builder: (context) => const MainPageWidget()), //ここにエラー出てる
         );
       }
     } on FirebaseAuthException catch (e) {
