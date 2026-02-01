@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 //import 'firebase_options.dart';
-import 'dart:async';
+//import 'dart:async';
 import '../Share/header.dart'; // 共通ヘッダー
 import '../Share/footer.dart'; // 共通フッター
 import '../User/User.dart'; // AnimeListPage など
+import '../User/other_user_ranking_page.dart';
 
 class MainPageWidget extends StatefulWidget {
   const MainPageWidget({super.key});
@@ -51,6 +52,8 @@ class _MainPageWidgetState extends State<MainPageWidget> {
             const MyListSlider2(),
             const SizedBox(height: 30),
             const Footer(),
+            const SizedBox(height: 30),
+            const AllUserRanking(),
           ],
         ),
       ),
@@ -171,6 +174,102 @@ class _AutoScrollSliderState extends State<AutoScrollSlider>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// =====================================================
+// みんなのマイランキング
+// =====================================================
+class AllUserRanking extends StatelessWidget {
+  const AllUserRanking({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            "🔥 みんなのマイランキング",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 230,
+          child: StreamBuilder<QuerySnapshot>(
+            stream:
+                FirebaseFirestore.instance.collection("myRankings").snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final docs = snapshot.data!.docs;
+
+              if (docs.isEmpty) {
+                return const Center(child: Text("ランキングがありません"));
+              }
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  return _rankingCard(context, data);
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _rankingCard(BuildContext context, Map<String, dynamic> data) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtherUserRankingPage(
+              rankingData: data,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: 220,
+        margin: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              data["title"] ?? "タイトルなし",
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "作成者：${data["user"] ?? "不明"}",
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const Spacer(),
+            Text(
+              "作品数：${(data["items"] as List?)?.length ?? 0}",
+            ),
+          ],
+        ),
       ),
     );
   }

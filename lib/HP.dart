@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'Share/header.dart'; // 共通ヘッダー
 import 'Share/footer.dart'; // 共通フッターを追加
+import 'Share/app_scaffold.dart';
 
 class MainPageWidget extends StatelessWidget {
   const MainPageWidget({super.key});
@@ -131,6 +132,17 @@ class SeeMoreButton extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: const Text('もっと見る'),
+    );
+  }
+}
+
+class HP extends StatelessWidget {
+  const HP({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppScaffold(
+      body: const MainPageWidget(), // ← これがベスト
     );
   }
 }
