@@ -16,6 +16,8 @@ class OtherUsersMyRanking extends StatelessWidget {
     for (final userDoc in usersSnapshot.docs) {
       if (userDoc.id == currentUser?.uid) continue;
 
+      final userName = userDoc.data()['name'] ?? '名無し';
+
       final rankingSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(userDoc.id)
@@ -25,6 +27,7 @@ class OtherUsersMyRanking extends StatelessWidget {
       for (final doc in rankingSnapshot.docs) {
         final data = doc.data();
         data['userId'] = userDoc.id;
+        data['userName'] = userName; // ★追加
         results.add(data);
       }
     }
